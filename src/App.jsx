@@ -43,10 +43,8 @@ const App = () => {
   const draggableMarkup = <Draggable>Drag me</Draggable>;
   return (
     <div className="flex h-[calc(100vh-112px)]">
-      <div className="flex-none w-fit">
-        <Menu />
-      </div>
-      <div className="flex-auto bg-gray-200 p-4">
+      <div className="flex-none w-fit">{/* <Menu /> */}</div>
+      <div className="flex-auto white p-4">
         <Canvas />
       </div>
     </div>

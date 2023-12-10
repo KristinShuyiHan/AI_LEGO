@@ -95,7 +95,7 @@ const myStore = (set) => ({
           id: stage + "-" + store.uuid,
           descr: "",
           details: {},
-          position: { x: 0, y: 0 },
+          position: { x: 110, y: 0 },
         });
       }),
       false,
