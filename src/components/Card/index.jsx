@@ -1,5 +1,4 @@
-// Card.jsx
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import { ItemTypes } from "../Constants";
 import Draggable from "react-draggable";
 import Xarrow from "react-xarrows";
@@ -7,6 +6,8 @@ import useMyStore from "../../contexts/context";
 import { shallow } from "zustand/shallow";
 import Popup from "reactjs-popup";
 import { v4 as uuidv4 } from "uuid";
+import { FaSave } from "react-icons/fa";
+import { FaEdit } from "react-icons/fa";
 
 const ConnectPointsWrapper = ({ boxId, handler, dragRef, boxRef }) => {
   const ref1 = useRef();
@@ -17,7 +18,7 @@ const ConnectPointsWrapper = ({ boxId, handler, dragRef, boxRef }) => {
   return (
     <React.Fragment>
       <div
-        className="connectPoint top-[calc(50%-7.5px)] right-0 absolute w-4 h-4 rounded-full bg-black"
+        className="connectPoint top-[calc(50%-7.5px)] right-0 absolute w-2 h-2 rounded-full bg-black"
         style={{
           ...position,
         }}
@@ -50,76 +51,111 @@ const ConnectPointsWrapper = ({ boxId, handler, dragRef, boxRef }) => {
           start={boxId}
           startAnchor={"right"}
           end={ref1}
+          color="black"
         />
       ) : null}
     </React.Fragment>
   );
 };
+const colorClasses = {
+  problem: "problem",
+  task: "task",
+  data: "data",
+  model: "model",
+  train: "train",
+  test: "test",
+  deploy: "deploy",
+  feedback: "feedback",
+};
+
 const getBorderColorClassFromId = (id) => {
   const stageName = id.split("-")[0];
-  switch (stageName) {
-    case "problem":
-      return "border-problem";
-    case "task":
-      return "border-task";
-    case "data":
-      return "border-data";
-    case "model":
-      return "border-model";
-    case "train":
-      return "border-train";
-    case "test":
-      return "border-test";
-    case "deploy":
-      return "border-deploy";
-    case "feedback":
-      return "border-feedback";
-    // Add other cases as needed
-    default:
-      return "border-dark-gray"; // default border color
-  }
+  return `border-${colorClasses[stageName]}`; // This will return something like "border-red-500"
 };
+
 const getBgColorClassFromId = (id) => {
   const stageName = id.split("-")[0];
-  switch (stageName) {
-    case "problem":
-      return "bg-problem";
-    case "task":
-      return "bg-task";
-    case "data":
-      return "bg-data";
-    case "model":
-      return "bg-model";
-    case "train":
-      return "bg-train";
-    case "test":
-      return "bg-test";
-    case "deploy":
-      return "bg-deploy";
-    case "feedback":
-      return "bg-feedback";
-    // Add other cases as needed
-    default:
-      return "border-dark-gray"; // default border color
-  }
+  return `bg-${colorClasses[stageName]}`;
+};
+
+const CommentComponent = ({
+  comment,
+  handleReplyToComment,
+  level = 0,
+  allComments,
+}) => {
+  const [showReplyInput, setShowReplyInput] = useState(false);
+  const [replyText, setReplyText] = useState("");
+
+  const submitReply = () => {
+    handleReplyToComment(comment.id, replyText);
+    setReplyText("");
+    setShowReplyInput(false);
+  };
+
+  // Find child comments for the current comment
+  const childComments = allComments.filter((c) => c.parentId === comment.id);
+
+  return (
+    <div>
+      <div className={`ml-${level * 2} mt-2 border-l-2 border-gray-300 pl-4`}>
+        <div className="comment p-2">
+          <p>{comment.text}</p>
+          <button
+            className="text-blue-500 hover:text-blue-700 text-sm font-semibold"
+            onClick={() => setShowReplyInput(!showReplyInput)}
+          >
+            Reply
+          </button>
+          {showReplyInput && (
+            <div className="mt-2">
+              <textarea
+                className="w-full border border-gray-300 p-2 mb-2 rounded"
+                placeholder="Type your reply here..."
+                value={replyText}
+                onChange={(e) => setReplyText(e.target.value)}
+              />
+              <button
+                className="text-white bg-blue-500 hover:bg-blue-700 font-bold py-1 px-2 rounded text-sm"
+                onClick={submitReply}
+              >
+                Post Reply
+              </button>
+            </div>
+          )}
+        </div>
+        {childComments.map((childComment) => (
+          <CommentComponent
+            key={childComment.id}
+            comment={childComment}
+            handleReplyToComment={handleReplyToComment}
+            level={level + 1}
+            allComments={allComments}
+          />
+        ))}
+      </div>
+    </div>
+  );
 };
 export default function Card({ id, handleDelete, text, handler, boxId }) {
+  const borderColorClass = getBorderColorClassFromId(id);
+  const bgColorClass = getBgColorClassFromId(id);
   const cardData = useMyStore(
     (store) => store.cardsData.filter((cardData) => cardData.id === id)[0],
     shallow
   );
+  // Extract the stage description from cardData
 
+  const prompt = cardData ? cardData.prompt : "No prompt available";
   const setCardPosition = useMyStore((store) => store.setCardPosition);
   const dragRef = useRef();
   const boxRef = useRef();
 
-  // Function to render the trigger for the hover box
   const renderStageNameTrigger = () => (
-    <div className="stage-name-trigger" style={{ display: "inline-block" }}>
+    <div className={`${bgColorClass} p-1 py-0 rounded text-center text-sm`}>
       {stageName}
     </div>
   );
-
   const handleStop = (event, dragElement) => {
     setCardPosition(dragElement.node.id, {
       x: dragElement.x,
@@ -138,24 +174,6 @@ export default function Card({ id, handleDelete, text, handler, boxId }) {
     useMyStore.getState().updateCardText(cardId, newText);
   };
 
-  // Add state to control the visibility of the popup
-  const [open, setOpen] = useState(false);
-  const closeModal = () => setOpen(false);
-  const [showCommentBox, setShowCommentBox] = useState(false);
-  const [comments, setComments] = useState([]);
-  const [commentText, setCommentText] = useState("");
-
-  const handleSaveComment = (text, parentId = null) => {
-    if (!text) return; // Don't save empty comments
-    const newComment = {
-      id: uuidv4(),
-      text: text, // Use the text passed as an argument
-      parentId: parentId,
-      childComments: [],
-    };
-    setComments((currentComments) => [newComment, ...currentComments]);
-  };
-
   const handleReplyToComment = (parentId, replyText) => {
     if (!replyText) return; // Don't add empty replies
 
@@ -166,93 +184,130 @@ export default function Card({ id, handleDelete, text, handler, boxId }) {
       childComments: [],
     };
 
-    // Add newReply to comments state
+    /// Add newReply to comments state
     setComments((currentComments) => {
-      const newComments = [...currentComments];
-
-      const parentIndex = newComments.findIndex(
-        (comment) => comment.id === parentId
-      );
-      if (parentIndex > -1) {
-        // Add newReply as a child comment of the parent comment
-        newComments[parentIndex].childComments.push(newReply.id);
-      }
-
-      return [newReply, ...newComments];
+      const updatedComments = [...currentComments, newReply];
+      return updatedComments;
     });
   };
 
-  const CommentComponent = ({
-    comment,
-    level = 0,
-    handleReplyToComment,
-    setShowReplyBox,
-    showReplyBox,
-    replyText,
-    setReplyText,
-    getBorderColorClassFromId,
-  }) => {
-    const indentClass = `ml-${level * 4}`; // Adjust indentation based on the comment level
+  // Add state to control the visibility of the popup
+  const [showSmallCommentBox] = useState(true); // New state for small comment box
 
-    return (
-      <div
-        className={`comment border-2 p-2 mb-2 ${indentClass} ${getBorderColorClassFromId(
-          comment.id
-        )}`}
-      >
-        <p>{comment.text}</p>
-        <button
-          className="text-white font-bold py-1 px-2 rounded text-sm"
-          style={{ backgroundColor: "cornflowerblue" }}
-          onClick={() =>
-            setShowReplyBox(showReplyBox === comment.id ? null : comment.id)
-          }
-        >
-          Reply
-        </button>
-        {showReplyBox === comment.id && (
-          <div className="reply-box">
-            <textarea
-              className="w-full p-2"
-              placeholder="Type your reply here..."
-              value={replyText}
-              onChange={(e) => setReplyText(e.target.value)}
-            ></textarea>
-            <button
-              onClick={() => {
-                handleReplyToComment(comment.id, replyText);
-                setReplyText("");
-                setShowReplyBox(null);
-              }}
-            >
-              Post Reply
-            </button>
-          </div>
-        )}
-        {comment.childComments.map((childId) => {
-          const childComment = comments.find((c) => c.id === childId);
-          return (
-            <CommentComponent
-              key={childId}
-              comment={childComment}
-              level={level + 1}
-              handleReplyToComment={handleReplyToComment}
-              setShowReplyBox={setShowReplyBox}
-              showReplyBox={showReplyBox}
-              replyText={replyText}
-              setReplyText={setReplyText}
-              getBorderColorClassFromId={getBorderColorClassFromId}
-            />
-          );
-        })}
-      </div>
+  // State to keep track of comment boxes
+  const [hasComments, setHasComments] = useState(false);
+  const [commentBoxes, setCommentBoxes] = useState([]);
+  const [open, setOpen] = useState(false);
+  const closeModal = () => setOpen(false);
+  const [comments, setComments] = useState([]);
+  const [commentText, setCommentText] = useState("");
+  const [showComments, setShowComments] = useState(true);
+
+  // Function to toggle the visibility of the comment boxes
+  const toggleCommentsVisibility = () => {
+    setShowComments(!showComments);
+  };
+
+  // Function to add a new comment box
+  const addCommentBox = () => {
+    setCommentBoxes(commentBoxes.concat({ id: uuidv4(), text: "" }));
+    if (!hasComments) {
+      setHasComments(true);
+    }
+  };
+
+  // Function to update the text of a specific comment box
+  const updateCommentBoxText = (id, text) => {
+    setCommentBoxes(
+      commentBoxes.map((box) => (box.id === id ? { ...box, text } : box))
     );
   };
-  const [showReplyBox, setShowReplyBox] = useState(null); // State to control which comment shows the reply box
-  const [replyText, setReplyText] = useState(""); // State for the reply text
 
-  const borderColorClass = getBorderColorClassFromId(id);
-  const bgColorClass = getBgColorClassFromId(id);
+  // Add a Tailwind CSS class for fixed width and flexible height
+  const cardClass = "relative bg-gray-200 rounded shadow p-2 w-60";
+
+  // This function handles saving new comments and editing existing ones.
+  const handleSaveComment = (input) => {
+    // Regular expression to check if the input is a UUID
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const isUuid = uuidRegex.test(input);
+
+    // If the input is a UUID, we assume it's a boxId and handle saving a comment linked to a specific comment box
+    if (isUuid) {
+      const boxIndex = commentBoxes.findIndex((box) => box.id === input);
+      if (boxIndex === -1) return; // If boxId is not found, exit the function
+
+      const box = commentBoxes[boxIndex];
+      if (box && box.text.trim()) {
+        if (box.isEditing && box.commentId) {
+          // Editing existing comment
+          setComments((currentComments) =>
+            currentComments.map((comment) =>
+              comment.id === box.commentId
+                ? { ...comment, text: box.text }
+                : comment
+            )
+          );
+        } else {
+          // Saving new comment linked to a comment box
+          const newComment = {
+            id: uuidv4(),
+            text: box.text,
+            parentId: null,
+            childComments: [],
+          };
+          setComments((currentComments) => [...currentComments, newComment]);
+        }
+        // Clear the text in the comment box and reset its editing state
+        const updatedBoxes = [...commentBoxes];
+        updatedBoxes[boxIndex] = { ...box, isEditing: false, text: box.text };
+        setCommentBoxes(updatedBoxes);
+        // setHasComments(comments.length > 0);
+      }
+    } else {
+      // If the input is not a UUID, we assume it's regular text and handle saving a new top-level comment
+      const text = input;
+      if (text.trim()) {
+        const newComment = {
+          id: uuidv4(),
+          text: text,
+          parentId: null, // Top-level comment has no parent
+          childComments: [],
+        };
+        setComments((currentComments) => [...currentComments, newComment]);
+        // setHasComments(comments.length > 0);
+
+        const newCommentBox = {
+          id: uuidv4(), // Unique ID for the new comment box
+          text: commentText, // The text of the comment
+          isEditing: false, // The new box is not in edit mode by default
+        };
+        // Update the commentBoxes state to include the new comment box
+        setCommentBoxes((currentBoxes) => [...currentBoxes, newCommentBox]);
+
+        // Optionally, clear the comment input field in the modal
+        setCommentText("");
+      }
+    }
+  };
+
+  // This function toggles edit mode for a comment box
+  const toggleEdit = (boxId, commentId = null) => {
+    const boxIndex = commentBoxes.findIndex((box) => box.id === boxId);
+    if (boxIndex === -1) return;
+
+    const updatedBoxes = [...commentBoxes];
+    const box = updatedBoxes[boxIndex];
+
+    // Toggle the isEditing state and set commentId if provided
+    updatedBoxes[boxIndex] = {
+      ...box,
+      isEditing: !box.isEditing,
+      commentId: commentId ?? box.commentId, // Keep the same commentId if not provided
+    };
+    setCommentBoxes(updatedBoxes);
+  };
 
   return (
     <Draggable
@@ -264,9 +319,12 @@ export default function Card({ id, handleDelete, text, handler, boxId }) {
       }}
     >
       <div
-        className="rounded-lg flex flex-col bg-gray-100 w-40 h-28 shadow-md overflow-hidden"
+        className={`absolute bg-gray-200 rounded shadow p-2 ${
+          showComments ? "" : "min-h-[100px]"
+        } w-60`} // w-96 for fixed width
         id={boxId}
         ref={boxRef}
+        style={{ paddingBottom: "0" }}
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => {
           console.log(e.dataTransfer.getData("arrow"));
@@ -276,16 +334,19 @@ export default function Card({ id, handleDelete, text, handler, boxId }) {
           }
         }}
       >
-        <div
-          className={`text-lg flex flex-row font-bold bg-${
-            id.split("-")[0]
-          } p-2 rounded-t-lg`}
+        <button
+          onClick={() => handleDelete(id, boxId)}
+          className="absolute top-0 right-0 text p-1"
         >
+          ❌
+        </button>
+        <div className={`absolute top-1 left-1 `}>
           <Popup
             trigger={renderStageNameTrigger} // Set the trigger to the function that renders the stage name
             on="hover" // Set the Popup to trigger on hover
-            position="top center" // Adjust the position as needed
+            position={["top center", "bottom right", "bottom left"]} // Adjust the position as needed
             closeOnDocumentClick
+            keepTooltipInside={true}
             mouseLeaveDelay={300} // Delay in milliseconds before the Popup closes after mouse leaves
             mouseEnterDelay={0} // Delay in milliseconds before the Popup opens on mouse enter
             contentStyle={{
@@ -311,104 +372,123 @@ export default function Card({ id, handleDelete, text, handler, boxId }) {
               }}
             >
               {/* Content of your hover box */}
-              <span>
-                Details about the Details about theDetails about the Details
-                about the Details about the Details about the Details about the
-                Details about the Details about the Details about the{stageName}
-              </span>
+
+              <span>{prompt}</span>
             </div>
           </Popup>
-          <button
-            onClick={() => handleDelete(id, boxId)}
-            className="ml-auto text-lg"
-          >
-            ❌
-          </button>
-
-          <ConnectPointsWrapper {...{ boxId, handler, dragRef, boxRef }} />
         </div>
-        {/* <p className="p-2">{text}</p> */}
-        <textarea
-          className="p-2"
-          value={text}
-          onChange={(e) => handleTextChange(e.target.value, id)}
-          placeholder="Enter text here..."
-        />
-        {/* Amplify button */}
-        <button
-          className="absolute bottom-2 right-2 text-lg"
-          onClick={() => setOpen((o) => !o)}
-        >
-          🔍
-        </button>
-        <Popup open={open} closeOnDocumentClick onClose={closeModal}>
-          {/* Popup content here, you can use the same structure as the given Popup code */}
-          {(close) => (
-            // <div className="modal w-96 p-5 bg-white rounded shadow-lg text-gray-700 whitespace-normal">
-            // <div className="p-5 bg-white rounded shadow-lg text-gray-700 w-96 min-h-[150px]">
-            <div className="modal w-[600px] p-5 bg-white rounded shadow-lg text-gray-700 ">
-              <button
-                className="text-black absolute top-0 right-0 mt-4 mr-4"
-                onClick={close}
-              >
-                &times;
-              </button>
-              <div
-                className={`text-lg font-bold border-b  pb-2 mb-2  ${bgColorClass} rounded-lg`}
-              >
-                {stageName}
-              </div>
-              {/* <div className="mb-4">{text}</div> */}
-              <div className="mb-4 text-sm overflow-auto">{text}</div>
-              {/* Comment section */}
-              <div className={`comments-section ${borderColorClass}`}>
-                {[...comments].reverse().map((comment) => (
-                  <CommentComponent
-                    key={comment.id}
-                    comment={comment}
-                    handleReplyToComment={handleReplyToComment}
-                    setShowReplyBox={setShowReplyBox}
-                    showReplyBox={showReplyBox}
-                    replyText={replyText}
-                    setReplyText={setReplyText}
-                    getBorderColorClassFromId={getBorderColorClassFromId}
-                  />
-                ))}
-              </div>
-              {showCommentBox && (
-                <div
-                  className={`comment-box-wrapper border-2 ${borderColorClass}`}
-                >
-                  <textarea
-                    className="comment-box w-full p-2 mb-2" // Set the width to full
-                    placeholder="Type your comment here..."
-                    value={commentText}
-                    onChange={(e) => setCommentText(e.target.value)}
-                  ></textarea>
-                  <button
-                    className="text-white font-bold py-1 px-2 rounded text-sm"
-                    style={{ backgroundColor: "cornflowerblue" }} // Inline style to set the button color
-                    onClick={() => {
-                      handleSaveComment(commentText);
-                      setCommentText(""); // Clear the input after saving the comment
-                    }}
-                  >
-                    Save
-                  </button>
-                </div>
-              )}
 
-              <div className="flex justify-center space-x-2 mt-2">
-                <button
-                  className="bg-red-500 text-white font-bold py-2 px-2 rounded"
-                  onClick={() => setShowCommentBox(!showCommentBox)}
-                >
-                  Comment
-                </button>
+        <ConnectPointsWrapper {...{ boxId, handler, dragRef, boxRef }} />
+
+        <div className="mt-4">
+          <textarea
+            className="p-3"
+            value={text}
+            onChange={(e) => handleTextChange(e.target.value, id)}
+            placeholder="Enter text here..."
+          />
+          <div className="text-lg -mt-2 ">
+            {/* Negative margin to p */}
+            <button className="pr-1" onClick={addCommentBox}>
+              💬
+            </button>
+            <button className="pr-1" onClick={() => setOpen((o) => !o)}>
+              🔍
+            </button>
+            {hasComments && (
+              <button onClick={toggleCommentsVisibility}>
+                {showComments ? "⬆️" : "⬇️"}
+              </button>
+            )}
+          </div>
+
+          {/* Render comment boxes */}
+          {showComments &&
+            commentBoxes.map((box) => (
+              <div key={box.id} className="flex items-center space-x-1">
+                <textarea
+                  className="block p-1 w-full lg:w-5/6 border-gray-300 rounded mb-2"
+                  placeholder="Add a comment..."
+                  value={box.text}
+                  onChange={(e) => updateCommentBoxText(box.id, e.target.value)}
+                  disabled={!box.isEditing}
+                />
+                {box.isEditing ? (
+                  <button
+                    className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-1 rounded text-sm "
+                    onClick={() => handleSaveComment(box.id)}
+                  >
+                    <FaSave />
+                  </button>
+                ) : (
+                  <button
+                    className="bg-green-500 hover:bg-green-700 text-white font-bold py-1 px-1 rounded text-sm  "
+                    onClick={() => toggleEdit(box.id, box.commentId)}
+                  >
+                    <FaEdit />
+                  </button>
+                )}
               </div>
-            </div>
-          )}
-        </Popup>
+            ))}
+
+          <Popup open={open} closeOnDocumentClick onClose={closeModal}>
+            {/* Popup content here, you can use the same structure as the given Popup code */}
+            {(close) => (
+              <div className="modal w-[600px] p-5 bg-white rounded shadow-lg border-8 border-gray-200 text-gray-700 ">
+                <button
+                  className="text-black absolute top-0 right-0 mt-4 mr-4"
+                  onClick={close}
+                >
+                  &times;
+                </button>
+                <div
+                  className={`text-lg font-bold border-b  p-1 py-0 mb-2  ${bgColorClass} rounded-lg`}
+                >
+                  {stageName}
+                </div>
+                {/* <div className="mb-4">{text}</div> */}
+                <div className="mb-4 text-sm overflow-auto">{text}</div>
+                {/* Comment section */}
+
+                {showSmallCommentBox && (
+                  <div>
+                    <textarea
+                      className="comment-box w-full border border-gray-300 p-2 mb-2 rounded" // Set the width to full
+                      placeholder="Type your comment here..."
+                      value={commentText}
+                      onChange={(e) => setCommentText(e.target.value)}
+                    ></textarea>
+                    <button
+                      className="text-white font-bold py-1 px-2 rounded text-sm"
+                      style={{ backgroundColor: "cornflowerblue" }} // Inline style to set the button color
+                      onClick={() => {
+                        handleSaveComment(commentText);
+                        setCommentText(""); // Clear the input after saving the comment
+                      }}
+                    >
+                      Save
+                    </button>
+                  </div>
+                )}
+                <div className={`comments-section ${borderColorClass}`}>
+                  {comments
+                    .filter((comment) => !comment.parentId)
+                    .map((comment) => (
+                      <CommentComponent
+                        key={comment.id}
+                        comment={comment}
+                        handleReplyToComment={handleReplyToComment}
+                        level={0}
+                        allComments={comments}
+                      />
+                    ))}
+                </div>
+
+                <div className="flex justify-center space-x-2 mt-2"></div>
+              </div>
+            )}
+          </Popup>
+        </div>
       </div>
     </Draggable>
   );
