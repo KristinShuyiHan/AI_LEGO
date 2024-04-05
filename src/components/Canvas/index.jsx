@@ -2,11 +2,12 @@ import React, { useEffect } from "react";
 import Card from "./Card";
 import Column from "./Column";
 import { useState } from "react";
-import useMyStore, { prompts } from "../../contexts/projectContext";
+import useMyStore, { prompts, colorClasses } from "../../contexts/projectContext";
 import Xarrow from "react-xarrows";
 import { useParams } from 'react-router-dom';
 import EvaluationPanel from "./Evaluation";
 import CollaboratorModal from "./CollaboratorModal";
+import MiniMap from "./MiniMap";
 
 
 const Canvas = () => {
@@ -20,6 +21,13 @@ const Canvas = () => {
     setIsModalOpen(false);
   };
 
+  const getBgColorClassFromId = (stage) => {
+    const bgColorClass = `bg-${colorClasses[stage]}`;
+    return bgColorClass;
+  };
+
+  const [selectedCardIds, setSelectedCardIds] = useState([]);
+
   const { projectId } = useParams();
   const linksPath = "smooth";
 
@@ -27,14 +35,17 @@ const Canvas = () => {
   const [hoverY, setHoverY] = useState(0);
 
   const cardsData = useMyStore((store) => store.cards);
+  const evaluations = useMyStore((store) => store.evaluations);
   const projectName = useMyStore((store) => store.projectName);
   const links = useMyStore((store) => store.links);
 
   const addTemplate = useMyStore((store) => store.addTemplate);
+  const canvasScale = useMyStore((store) => store.canvasScale);
   const addCardData = useMyStore((store) => store.addCardData);
   const pullProject = useMyStore((store) => store.pullProject);
   const cleanStore = useMyStore((store) => store.cleanStore);
   const setProjectName = useMyStore((store) => store.setProjectName);
+  const [isShiftPressed, setIsShiftPressed] = useState(false);
 
   // Add a function to handle delete action
   const handleDelete = (cardId) => {
@@ -42,45 +53,102 @@ const Canvas = () => {
     useMyStore.getState().deleteCardAndLinks(cardId);
   };
 
+  let stage2number = {};
+  let cardId2number = {}
+
   useEffect(() => {
     cleanStore(projectId);
     pullProject(projectId);
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Shift') {
+        setIsShiftPressed(true);
+      }
+    };
+
+    const handleKeyUp = (event) => {
+      if (event.key === 'Shift') {
+        setIsShiftPressed(false);
+
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
   }, [pullProject, projectId]);
 
-  console.log("Canvas rendering");
+
+  const changeSelectedCardIds = (cardId) => {
+    setSelectedCardIds(currentSelectedIds => (
+      currentSelectedIds.includes(cardId)
+        ? (
+          isShiftPressed
+          ? currentSelectedIds.filter(item => item !== cardId)
+          : []
+        )
+        : (
+          isShiftPressed
+          ? [...currentSelectedIds, cardId]
+          : [cardId]
+        )
+    )
+      
+    );
+  };
 
   return (
     // <div className="flex flex-row ">
-    <div className="relative pt-16 sketchbook-background">
-      {cardsData.map((card) => (
-        <Card
+    <div style={{width: `${canvasScale.x * 100}vw`, height: `${canvasScale.y * 100}vh`, paddingTop: '4rem', position: 'relative' }} className="sketchbook-background">
+
+      {cardsData.map((card) => {
+        if (card.stage in stage2number)
+        {
+          stage2number[card.stage] += 1;
+          cardId2number[card.uid] = stage2number[card.stage];
+        }
+        else
+        {
+          stage2number[card.stage] = 0;
+          cardId2number[card.uid] = 0;
+        }
+
+        return (
+          <Card
           id={card.uid}
+          key={card.uid}
+          number={stage2number[card.stage]}
           stage={card.stage}
-          //   handleDelete={() => {}}
           comments={card.comments}
           handleDelete={handleDelete}
-          key={card.uid}
           text={card.description}
-          {...{ handler: "right" }}
-          cardId={"" + card.id}
+          changeSelectedCardIds={changeSelectedCardIds}
+          selectedCardIds={selectedCardIds}
         />
-      ))}
+        )
+      })}
 
       {links.map((ar, idx) => (
         <Xarrow
           className="arrow"
           path={linksPath}
-          start={ar.start}
-          end={ar.end}
+          headSize={4}
+          start={ar.start+"-right"}
+          end={ar.end+"-left"}
           startAnchor={"right"}
           endAnchor={"left"}
           key={ar.start + "." + ar.end}
           labels={""}
+          zIndex={0}
           color="#9CAFB7"
         />
       ))}
 
-      <div className="flex flex-row fixed mt-4 left-0 mb-4 ml-4 flex flex-col">
+      <div className="flex flex-row fixed top-20 left-4 z-10">
         <input
           type="text"
           className="p-2 border-2"
@@ -97,36 +165,13 @@ const Canvas = () => {
       </div>
 
       <CollaboratorModal isOpen={isModalOpen} onClose={closeModal} />
-      <EvaluationPanel />
 
-      <div className="fixed bottom-0 left-0 mb-4 ml-4">
-        {/* <p className="font-bold text-lg">Templates:</p>
-        <button
-          onClick={() => addTemplate("empty")}
-          className="bg-red-400 rounded-lg p-0.5 my-1"
-        >
-          Clear
-        </button>
-        <button
-          onClick={() => addTemplate("8-stage")}
-          className="bg-cardet-gray rounded-lg p-0.5 my-1"
-        >
-          8 Stages
-        </button>
-        <button
-          onClick={() => addTemplate("6-stage")}
-          className="bg-sage rounded-lg p-0.5 my-1"
-        >
-          6 Stages
-        </button>
-        <button
-          onClick={() => addTemplate("3-stage")}
-          className="bg-citron rounded-lg p-0.5 my-1"
-        >
-          3 Stages
-        </button>
-        <br></br> */}
+      <EvaluationPanel selectedCardIds={[...selectedCardIds]} number={evaluations.length} cardsData={cardsData} cardId2number={cardId2number}/>
+        {/* Shallow copy */}
+      <MiniMap />
 
+
+      <div className="fixed bottom-0 left-0 mb-4 ml-4 z-10">
         <div className="flex flex-row">
           <div className="flex flex-col">
             <p className="font-bold text-lg">Stages:</p>
@@ -145,13 +190,13 @@ const Canvas = () => {
                     setHovered("");
                   }}
                   className={`rounded-lg w-[90px] p-1 my-1 ${stage === 'problem' ? 'bg-problem' :
-                      stage === 'task' ? 'bg-task' :
-                        stage === 'data' ? 'bg-data' :
-                          stage === 'model' ? 'bg-model' :
-                            stage === 'train' ? 'bg-train' :
-                              stage === 'test' ? 'bg-test' :
-                                stage === 'deploy' ? 'bg-deploy' :
-                                  stage === 'feedback' ? 'bg-feedback' : 'bg-default'
+                    stage === 'task' ? 'bg-task' :
+                      stage === 'data' ? 'bg-data' :
+                        stage === 'model' ? 'bg-model' :
+                          stage === 'train' ? 'bg-train' :
+                            stage === 'test' ? 'bg-test' :
+                              stage === 'deploy' ? 'bg-deploy' :
+                                stage === 'feedback' ? 'bg-feedback' : 'bg-default'
                     }`}
                 >
                   {stage.charAt(0).toUpperCase() + stage.slice(1)}
@@ -160,37 +205,13 @@ const Canvas = () => {
             }
           </div>
           <div
-            className={`h-min w-[300px] rounded-lg bg-black text-white text-center fixed left-[100px] z-[1001] transition-opacity duration-300 ${hovered !== "" ? "visible opacity-100" : "invisible opacity-0"}`}
+            className={`h-min w-[300px] rounded-lg bg-black text-white text-center fixed left-[110px] z-[1001] transition-opacity duration-300 ${hovered !== "" ? "visible opacity-100" : "invisible opacity-0"}`}
             style={{
               top: `${hoverY}px`
             }}>
             {prompts[hovered]}
           </div>
         </div>
-        {/* <button
-          onClick={() => addCardData("design")}
-          className="bg-design"
-        ></button>
-        <button
-          onClick={() => addCardData("develop")}
-          className="bg-develop"
-        ></button>{" "}
-        <button
-          onClick={() => addCardData("modelEvaluation")}
-          className="bg-modelEva"
-        ></button>
-        <button
-          onClick={() => addCardData("modelDevelopment")}
-          className="bg-modelDev"
-        ></button>
-        <button
-          onClick={() => addCardData("MLOps")}
-          className="bg-MLOps"
-        ></button>
-        <button
-          onClick={() => addCardData("problemDef")}
-          className="bg-problemDef"
-        ></button> */}
       </div>
     </div>
 

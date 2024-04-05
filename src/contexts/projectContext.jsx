@@ -163,12 +163,57 @@ export const prompts = {
     "Explain how feedback is gathered from users or stakeholders to improve the AI system and highlight how it helps the iteration of AI development.",
 };
 
+export const colorClasses = {
+  problem: "problem",
+  task: "task",
+  data: "data",
+  model: "model",
+  train: "train",
+  test: "test",
+  deploy: "deploy",
+  design: "design",
+  develop: "develop",
+  modelEvaluation: "modelEva",
+  modelDevelopment: "modelDev",
+  MLOps: "MLOps",
+  feedback: "feedback",
+  problemDef: "problemDef",
+  "➕": "➕",
+};
+
 const myStore = (set) => ({
   projectName: "",
   projectId: "",
   cards: [],
   links: [],
   evaluations: [],
+  canvasScale: { x: 1.1, y: 1.1 },
+  isRescaled: false,
+
+  extendCanvasRight: async () => {
+    const {canvasScale} = useMyStore.getState();
+
+    const totalPageWidth = document.documentElement.scrollWidth;
+    const viewportWidth = window.innerWidth;
+    set((state) => ({
+      ...state,
+      canvasScale: { x: totalPageWidth / viewportWidth, y: state.canvasScale.y },
+      isRescaled: true,
+    }));
+    // window.scrollBy((totalPageWidth / viewportWidth - canvasScale.x) * viewportWidth, 0);
+  },
+  extendCanvasBottom: async () => {
+    const {canvasScale} = useMyStore.getState();
+    const totalPageHeight = document.documentElement.scrollHeight;
+    const viewportHeight = window.innerHeight;
+    set((state) => ({
+      ...state,
+      canvasScale: { x: state.canvasScale.x, y: totalPageHeight / viewportHeight },
+      isRescaled: true,
+    }));
+    // window.scrollBy(0, (totalPageHeight / viewportHeight - canvasScale.y) * viewportHeight);
+  },
+
 
   pullProject: async (projectId) => {
     const projectDocSnap = await getDoc(doc(db, "projects", projectId));
@@ -185,6 +230,8 @@ const myStore = (set) => ({
         getDoc(doc(db, "cards", cardId)).then(cardDocSnap => cardDocSnap.data())
       );
       cards = await Promise.all(cardFetchPromises);
+      cards.sort((a, b) => b.createdAt - a.createdAt);
+
 
       for (const card of cards) {
         let comments = [];
@@ -212,6 +259,8 @@ const myStore = (set) => ({
       links: projectData.links,
       cards: cards,
       evaluations: evaluations,
+      canvasScale: projectData.canvasScale || { x: 1.1, y: 1.1 },
+      isRescaled: false,
     }));
   },
 
@@ -251,7 +300,7 @@ const myStore = (set) => ({
     }
   },
 
-  addEvaluation: async (username, report) => {
+  addEvaluation: async (username, selectedCardIds, report) => {
     const { projectId } = useMyStore.getState();
     if (projectId == null) {
       throw new Error("null projectId");
@@ -260,7 +309,7 @@ const myStore = (set) => ({
     const newEvaluation = {
       ...report,
       projectId: projectId,
-      cardIds: [],
+      cardIds: [...selectedCardIds],
       by: username,
       uid: "", // Temporarily empty, will be filled with doc I
       lastUpdatedTime: "Now"
@@ -291,8 +340,11 @@ const myStore = (set) => ({
       throw new Error("null projectId");
     }
 
-    const rightmostX = cards.reduce((max, card) => Math.max(card.position.x, max), 0);
-    const newPosition = { x: rightmostX + 170, y: 0 };
+    const x = cards.reduce((max, card) => Math.max(card.position.x, max), 0) + 300;
+    const y = cards.length > 0 ? cards.at(-1).position.y: 50;
+    const newPosition = { x: x, y: y };
+
+
 
     const newCard = {
       projectId: projectId,
@@ -312,7 +364,7 @@ const myStore = (set) => ({
         store.cards.push(newCard);
       }));
 
-      await updateDoc(cardDocRef, { uid: cardDocRef.id }); // Update the card with its UID
+      await updateDoc(cardDocRef, { uid: cardDocRef.id, createdAt: serverTimestamp() }); // Update the card with its UID
 
       await updateDoc(doc(db, "projects", projectId), {
         cards: arrayUnion(cardDocRef.id),
@@ -338,17 +390,27 @@ const myStore = (set) => ({
     }
   },
   setCardPosition: async (id, position) => {
+    const { isRescaled, canvasScale, projectId } = useMyStore.getState(); // Move this outside the async operation
+    
     set((state) => ({
       ...state,
       cards: state.cards.map((card) =>
         card.uid === id ? { ...card, position: position } : card
       ),
     }));
+    
     const cardDocRef = doc(db, "cards", id);
     try {
       await updateDoc(cardDocRef, { position: position });
+      
+      if (isRescaled) {
+        const projectDocRef = doc(db, "projects", projectId);
+        await updateDoc(projectDocRef, { canvasScale: canvasScale });
+        
+        set(({isRescaled: false}));
+      }
     } catch (error) {
-      console.error("Error updating card description: ", error);
+      console.error("Error updating card position: ", error);
     }
   },
 
@@ -375,13 +437,18 @@ const myStore = (set) => ({
   addLink: async (refs) => {
     if (refs.start === refs.end)
       return;
+
+    let exist = false;
     set(
       produce((store) => {
-        if (!store.links.includes(refs)) {
+        if (!store.links.some(link => (link.start === refs.start && link.end === refs.end))) {
           store.links.push(refs);
-        }
+          exist = true;
+      }
       })
     );
+    
+    if (exist) return; // Prevent duplicates
 
     const { projectId } = useMyStore.getState();
 
@@ -453,6 +520,8 @@ const myStore = (set) => ({
         evaluations: [],
         projectName: "",
         projectId: "",
+        canvasScale: { x: 1.1, y: 1.1 },
+        isRescaled: false,
       });
     }
   },
@@ -468,6 +537,8 @@ const myStore = (set) => ({
       evaluations: [],
       projectName: "",
       projectId: "",
+      canvasScale: { x: 1.1, y: 1.1 },
+      isRescaled: false,
     });
   },
 
